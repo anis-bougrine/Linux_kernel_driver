@@ -4,7 +4,7 @@
 #include <linux/io.h>
 
 //This function is triggered at module loading
-int Custom_peripheral_driver_init(void)
+static __init int Custom_peripheral_driver_init(void)
 {
     //Write your code here.
     
@@ -13,7 +13,7 @@ int Custom_peripheral_driver_init(void)
 }
 
 //This function is triggered at module unloading
-void Custom_peripheral_driver_exit(void)
+static __exit void Custom_peripheral_driver_exit(void)
 {
     //Clean the ressources you used before exiting (free allocated memory, switch off peripherals clocks...) 
     printk(KERN_INFO "Goodbye, world\n");
