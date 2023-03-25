@@ -7,6 +7,8 @@
 int Custom_peripheral_driver_init(void)
 {
     //Write your code here.
+    
+    printk(KERN_INFO "Hello world\n");
     return 0;
 }
 
@@ -14,8 +16,12 @@ int Custom_peripheral_driver_init(void)
 void Custom_peripheral_driver_exit(void)
 {
     //Clean the ressources you used before exiting (free allocated memory, switch off peripherals clocks...) 
+    printk(KERN_INFO "Goodbye, world\n");
 }
 
-MODULE_LICENSE("GPL");
 module_init(Custom_peripheral_driver_init);
 module_exit(Custom_peripheral_driver_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Anis Bougrine");
+MODULE_DESCRIPTION("Linux kernel driver skeleton");
