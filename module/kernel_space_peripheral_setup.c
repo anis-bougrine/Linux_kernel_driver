@@ -3,12 +3,13 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/slab.h>
+#include <linux/io.h>
 #include "api.h"
 
 // Global variables
 static int base_address = 0;
+static void __iomem *mapped_base; // Pointer to mapped physical memory
 static register_metadata registers_map[MAX_REGISTERS];
-static register_data registers_data[MAX_REGISTERS];
 
 // Function prototypes
 static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
@@ -36,7 +37,14 @@ static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long 
         {
             return -EFAULT;
         }
-        printk(KERN_INFO "Base address set to 0x%x\n", base_address);
+        // Map the physical memory to kernel virtual address space
+        mapped_base = ioremap(base_address, MAX_REGISTERS * sizeof(int));
+        if (!mapped_base)
+        {
+            printk(KERN_ERR "Failed to map physical memory\n");
+            return -ENOMEM;
+        }
+        printk(KERN_INFO "Base address set to 0x%x and mapped\n", base_address);
         break;
 
     case IOCTL_SET_REGISTER_NAME:
@@ -77,7 +85,8 @@ static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long 
         {
             if (memcmp(registers_map[i].name, rdata->name, 4) == 0)
             {
-                registers_data[i].data = rdata->data;
+                // Write data directly to physical memory
+                iowrite32(rdata->data, mapped_base + registers_map[i].address);
                 break;
             }
         }
@@ -99,14 +108,17 @@ static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long 
         {
             if (memcmp(registers_map[i].name, bdata->register_name, 4) == 0)
             {
+                // Read-modify-write operation for bit manipulation
+                u32 reg_value = ioread32(mapped_base + registers_map[i].address);
                 if (bdata->bit_value)
                 {
-                    registers_data[i].data |= (1 << bdata->bit_offset);
+                    reg_value |= (1 << bdata->bit_offset);
                 }
                 else
                 {
-                    registers_data[i].data &= ~(1 << bdata->bit_offset);
+                    reg_value &= ~(1 << bdata->bit_offset);
                 }
+                iowrite32(reg_value, mapped_base + registers_map[i].address);
                 break;
             }
         }
@@ -136,7 +148,12 @@ static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long 
         break;
 
     case IOCTL_GET_REGISTERS_DATA:
-        if (copy_to_user((register_data *)arg, registers_data, sizeof(register_data) * MAX_REGISTERS))
+        // Read data directly from physical memory
+        for (i = 0; i < MAX_REGISTERS; i++)
+        {
+            registers_map[i].data = ioread32(mapped_base + registers_map[i].address);
+        }
+        if (copy_to_user((register_data *)arg, registers_map, sizeof(register_data) * MAX_REGISTERS))
         {
             return -EFAULT;
         }
@@ -151,7 +168,7 @@ static long peripheral_ioctl(struct file *file, unsigned int cmd, unsigned long 
 // Module initialization
 static int __init peripheral_init(void)
 {
-    printk(KERN_INFO "Peripheral setup driver unloaded\n");
+    printk(KERN_INFO "Peripheral setup driver loaded\n");
     register_chrdev(240, "peripheral_setup", &fops); // Register character device with major number 240
     return 0;
 }
@@ -159,6 +176,10 @@ static int __init peripheral_init(void)
 // Module cleanup
 static void __exit peripheral_exit(void)
 {
+    if (mapped_base)
+    {
+        iounmap(mapped_base); // Unmap the physical memory
+    }
     printk(KERN_INFO "Peripheral setup driver unloaded\n");
     unregister_chrdev(240, "peripheral_setup");
 }
@@ -168,4 +189,4 @@ module_exit(peripheral_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Anis Bougrine");
-MODULE_DESCRIPTION("General pripheral registers manipulation");
+MODULE_DESCRIPTION("General peripheral registers manipulation");
